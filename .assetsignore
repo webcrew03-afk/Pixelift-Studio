@@ -1,0 +1,11 @@
+.git
+.github
+node_modules
+worker
+functions
+wrangler.jsonc
+wrangler.toml
+package.json
+package-lock.json
+README.md
+.assetsignore

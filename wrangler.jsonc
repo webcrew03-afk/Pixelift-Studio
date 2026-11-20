@@ -1,0 +1,15 @@
+{
+  // Pixelift Studio — static site + Worker for secure kit downloads
+  "name": "pixelift-studio",
+  "main": "worker/index.js",
+  "compatibility_date": "2025-06-01",
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "vars": {
+    // Public Razorpay Key ID (the Key SECRET is a Worker secret, never in this file)
+    "RAZORPAY_KEY_ID": "rzp_live_U2UmdUhr1QCTTZ"
+  }
+}
