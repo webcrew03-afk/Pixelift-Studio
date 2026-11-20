@@ -1,0 +1,98 @@
+/*
+ * Secure kit download — Cloudflare Pages Function at /api/download
+ *
+ * After a buyer pays, the site sends them to:
+ *   /api/download?kit=kit-dashboard&payment_id=pay_XXXX
+ * This function asks Razorpay whether that payment is real, paid in full
+ * and for this kit, then streams the zip from a PRIVATE Cloudflare R2 bucket.
+ *
+ * Cloudflare setup (Pages project → Settings):
+ *   - Bindings → R2 bucket:  variable name  KITS  → your private bucket
+ *   - Variables and Secrets: RAZORPAY_KEY_ID      (rzp_live_…)
+ *                            RAZORPAY_KEY_SECRET  (type: Secret / encrypted)
+ * Upload the zip to the bucket with the exact file name listed below.
+ */
+
+const PRODUCTS = {
+  "kit-dashboard": { name: "Motion Dashboard", file: "motion-dashboard.zip", amount: 300000 }, // paise (₹3,000)
+};
+
+const LINK_VALID_DAYS = 30;
+const SUPPORT_EMAIL = "hello@pixelift.studio";
+
+export async function onRequestGet({ request, env }) {
+  const url = new URL(request.url);
+  const kit = url.searchParams.get("kit") || "";
+  const paymentId = url.searchParams.get("payment_id") || "";
+  const product = PRODUCTS[kit];
+
+  if (!product || !/^pay_[A-Za-z0-9]{6,40}$/.test(paymentId)) {
+    return page(400, "Invalid download link", "This link is incomplete. Please use the Download button shown after payment.");
+  }
+  if (!env.KITS || !env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
+    return page(503, "Downloads are being set up", `Your payment is safe. Email ${SUPPORT_EMAIL} with your payment ID (${paymentId}) and we'll send your files.`);
+  }
+
+  const auth = "Basic " + btoa(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`);
+  const api = `https://api.razorpay.com/v1/payments/${paymentId}`;
+
+  let payment;
+  try {
+    const res = await fetch(api, { headers: { Authorization: auth } });
+    if (res.status === 400 || res.status === 404) {
+      return page(404, "Payment not found", `We couldn't find this payment. Email ${SUPPORT_EMAIL} if you were charged.`);
+    }
+    if (!res.ok) throw new Error(`Razorpay ${res.status}`);
+    payment = await res.json();
+  } catch (e) {
+    return page(502, "Couldn't verify payment", "Razorpay didn't respond. Please try again in a minute.");
+  }
+
+  const notes = payment.notes || {};
+  if (payment.amount !== product.amount || payment.currency !== "INR" || notes.product_id !== kit) {
+    return page(403, "Payment doesn't match this kit", `Email ${SUPPORT_EMAIL} with your payment ID (${paymentId}) and we'll sort it out.`);
+  }
+
+  // Payments are usually auto-captured. If this one is only authorised, capture it now.
+  if (payment.status === "authorized") {
+    const cap = await fetch(`${api}/capture`, {
+      method: "POST",
+      headers: { Authorization: auth, "Content-Type": "application/json" },
+      body: JSON.stringify({ amount: product.amount, currency: "INR" }),
+    });
+    if (cap.ok) payment = await cap.json();
+  }
+  if (payment.status !== "captured") {
+    return page(402, "Payment not completed", "This payment hasn't gone through yet. If money was deducted, wait a minute and refresh this page.");
+  }
+
+  const ageDays = (Date.now() / 1000 - payment.created_at) / 86400;
+  if (ageDays > LINK_VALID_DAYS) {
+    return page(410, "Download link expired", `Email ${SUPPORT_EMAIL} with your payment ID (${paymentId}) for a fresh copy.`);
+  }
+
+  const obj = await env.KITS.get(product.file);
+  if (!obj) {
+    return page(503, "File temporarily unavailable", `Your payment is confirmed. Email ${SUPPORT_EMAIL} with your payment ID (${paymentId}) and we'll send the files right away.`);
+  }
+
+  return new Response(obj.body, {
+    headers: {
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${product.file}"`,
+      "Content-Length": String(obj.size),
+      "Cache-Control": "private, no-store",
+      "X-Robots-Tag": "noindex",
+    },
+  });
+}
+
+function page(status, title, message) {
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)} · Pixelift Studio</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;padding:16px;background:#07070d;color:#f4f2fb;font:16px/1.55 Inter,system-ui,sans-serif}
+.b{max-width:440px;background:#12121c;border:1px solid rgba(255,255,255,.14);border-radius:20px;padding:28px}h1{margin:0 0 10px;font-size:22px}p{margin:0 0 20px;color:#9b97ad}
+a{display:inline-block;padding:12px 20px;border-radius:99px;font-weight:700;color:#fff;text-decoration:none;background:linear-gradient(90deg,#ff3d7f,#8b5cf6)}</style></head>
+<body><div class="b"><h1>${esc(title)}</h1><p>${esc(message)}</p><a href="/">Back to Pixelift</a></div></body></html>`;
+  return new Response(html, { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex" } });
+}
