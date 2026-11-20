@@ -26,7 +26,6 @@
     "kit-nightline": { name: "Nightline UI", price: 149, download: "" },
     "kit-dashboard": { name: "Motion Dashboard", price: 149, download: "" },
     "kit-login": { name: "Login Page Speed Build", price: 99, download: "" },
-    "kit-shop": { name: "E-commerce Motion Kit", price: 149, download: "" },
     "plan-bundle": { name: "Bundle — any 5 UI kits", price: 499, download: "" },
     "plan-all-access": { name: "All-access — 1 month", price: 299, download: "" },
   };
