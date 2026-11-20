@@ -1,26 +1,26 @@
 /*
- * Secure kit download — Cloudflare Pages Function at /api/download
+ * Secure kit download — handled by the Worker at /api/download
  *
  * After a buyer pays, the site sends them to:
  *   /api/download?kit=kit-dashboard&payment_id=pay_XXXX
  * This function asks Razorpay whether that payment is real, paid in full
  * and for this kit, then streams the zip from a PRIVATE Cloudflare R2 bucket.
  *
- * Cloudflare setup (Pages project → Settings):
- *   - Bindings → R2 bucket:  variable name  KITS  → your private bucket
- *   - Variables and Secrets: RAZORPAY_KEY_ID      (rzp_live_…)
- *                            RAZORPAY_KEY_SECRET  (type: Secret / encrypted)
- * Upload the zip to the bucket with the exact file name listed below.
+ * Cloudflare setup:
+ *   - R2 bucket "pixelift-kits" (private) holding the zip named below,
+ *     bound as KITS in wrangler.jsonc
+ *   - Worker secret RAZORPAY_KEY_SECRET (Settings → Variables and Secrets)
+ *   - RAZORPAY_KEY_ID is set in wrangler.jsonc (it is public)
  */
 
 const PRODUCTS = {
-  "kit-dashboard": { name: "Motion Dashboard", file: "motion-dashboard.zip", amount: 300000 }, // paise (₹3,000)
+  "kit-dashboard": { name: "Motion Dashboard", file: "motion-dashboard.zip", amount: 100 }, // paise — TEST PRICE ₹1. Set back to 300000 (₹3,000) after testing
 };
 
 const LINK_VALID_DAYS = 30;
 const SUPPORT_EMAIL = "hello@pixelift.studio";
 
-export async function onRequestGet({ request, env }) {
+export async function handleDownload(request, env) {
   const url = new URL(request.url);
   const kit = url.searchParams.get("kit") || "";
   const paymentId = url.searchParams.get("payment_id") || "";
