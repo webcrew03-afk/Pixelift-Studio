@@ -38,12 +38,22 @@ async function sha256(text) {
 const LINK_VALID_DAYS = 30;
 const SUPPORT_EMAIL = "hello@pixelift.studio";
 
+// Read a setting by name, forgiving case and "-" vs "_" (e.g. Kit-dashboard-url).
+function setting(env, name) {
+  if (env[name]) return env[name];
+  const want = name.toLowerCase().replace(/-/g, "_");
+  for (const k of Object.keys(env)) {
+    if (k.trim().toLowerCase().replace(/-/g, "_") === want && typeof env[k] === "string") return env[k];
+  }
+  return undefined;
+}
+
 export async function handleDownload(request, env) {
   const url = new URL(request.url);
 
   // Setup check (shows which settings are present — never their values): /api/download?check=1
   if (url.searchParams.get("check") === "1") {
-    const raw = env.KIT_DASHBOARD_URL;
+    const raw = setting(env, "KIT_DASHBOARD_URL");
     const rows = [
       ["RAZORPAY_KEY_ID", env.RAZORPAY_KEY_ID ? (/^rzp_(live|test)_/.test(env.RAZORPAY_KEY_ID) ? "OK" : "set, but should start with rzp_live_") : "MISSING"],
       ["RAZORPAY_KEY_SECRET", env.RAZORPAY_KEY_SECRET ? "OK" : "MISSING"],
@@ -58,7 +68,7 @@ export async function handleDownload(request, env) {
   if (!product || !/^pay_[A-Za-z0-9]{6,40}$/.test(paymentId)) {
     return page(400, "Invalid download link", "This link is incomplete. Please use the Download button shown after payment.");
   }
-  const fileUrl = driveDirect(env[product.urlSecret]);
+  const fileUrl = driveDirect(setting(env, product.urlSecret));
   if ((!env.KITS && !fileUrl) || !env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
     return page(503, "Downloads are being set up", `Your payment is safe. Email ${SUPPORT_EMAIL} with your payment ID (${paymentId}) and we'll send your files.`);
   }
