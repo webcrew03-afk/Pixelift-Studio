@@ -40,6 +40,17 @@ const SUPPORT_EMAIL = "hello@pixelift.studio";
 
 export async function handleDownload(request, env) {
   const url = new URL(request.url);
+
+  // Setup check (shows which settings are present — never their values): /api/download?check=1
+  if (url.searchParams.get("check") === "1") {
+    const raw = env.KIT_DASHBOARD_URL;
+    const rows = [
+      ["RAZORPAY_KEY_ID", env.RAZORPAY_KEY_ID ? (/^rzp_(live|test)_/.test(env.RAZORPAY_KEY_ID) ? "OK" : "set, but should start with rzp_live_") : "MISSING"],
+      ["RAZORPAY_KEY_SECRET", env.RAZORPAY_KEY_SECRET ? "OK" : "MISSING"],
+      ["KIT_DASHBOARD_URL", raw ? (driveDirect(raw) ? "OK" : "set, but not a valid https / Google Drive link") : "MISSING"],
+    ];
+    return page(200, "Download setup check", rows.map((r) => `${r[0]}: ${r[1]}`).join("  ·  "));
+  }
   const kit = url.searchParams.get("kit") || "";
   const paymentId = url.searchParams.get("payment_id") || "";
   const product = PRODUCTS[kit];
