@@ -2,3 +2,4 @@
 .art-img{width:100%;height:100%;object-fit:cover;object-position:center top;display:block}.ph-screen.ph-img{padding:0;background:#000}.ph-img img{width:100%;height:100%;object-fit:cover;display:block}.hero-canvas{touch-action:pan-y}
 @media(max-width:899px){.hero{min-height:0;padding-top:calc(env(safe-area-inset-top,0px) + 400px)}.hero-canvas{bottom:auto!important;height:calc(env(safe-area-inset-top,0px) + 410px)!important;top:0}.hero:after{height:calc(100% - 330px)}}
 @media(max-width:380px){.hero{padding-top:calc(env(safe-area-inset-top,0px) + 340px)}.hero-canvas{height:calc(env(safe-area-inset-top,0px) + 350px)!important}.hero:after{height:calc(100% - 280px)}}
+.cards:has(>.card:only-child){grid-template-columns:minmax(0,640px);justify-content:center}.cards>.card:only-child .card-media{height:340px}@media(max-width:520px){.cards>.card:only-child .card-media{height:200px}}
