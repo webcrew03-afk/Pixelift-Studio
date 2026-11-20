@@ -14,7 +14,12 @@
  */
 
 const PRODUCTS = {
-  "kit-dashboard": { name: "Motion Dashboard", file: "motion-dashboard.zip", amount: 100 }, // paise — TEST PRICE ₹1. Set back to 300000 (₹3,000) after testing
+  "kit-dashboard": { name: "Motion Dashboard", file: "motion-dashboard.zip", amount: 90000 }, // paise (₹900)
+};
+
+// Discount codes in paise off. Keep in sync with COUPONS in assets/razorpay.js.
+const COUPONS = {
+  INSTA: 10000, // ₹100 off
 };
 
 const LINK_VALID_DAYS = 30;
@@ -49,7 +54,9 @@ export async function handleDownload(request, env) {
   }
 
   const notes = payment.notes || {};
-  if (payment.amount !== product.amount || payment.currency !== "INR" || notes.product_id !== kit) {
+  const coupon = String(notes.coupon || "").toUpperCase();
+  const expected = Math.max(100, product.amount - (COUPONS[coupon] || 0));
+  if (payment.amount !== expected || payment.currency !== "INR" || notes.product_id !== kit) {
     return page(403, "Payment doesn't match this kit", `Email ${SUPPORT_EMAIL} with your payment ID (${paymentId}) and we'll sort it out.`);
   }
 
