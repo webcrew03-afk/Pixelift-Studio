@@ -23,9 +23,9 @@
   // `download` is where the buyer is sent after a successful payment —
   // replace with your real file links (Google Drive, Gumroad file, S3, etc.).
   var PRODUCTS = {
-    "kit-nightline": { name: "Nightline UI", price: 149, download: "" },
-    "kit-dashboard": { name: "Motion Dashboard", price: 149, download: "" },
-    "kit-login": { name: "Login Page Speed Build", price: 99, download: "" },
+    "kit-nightline": { name: "Nightline UI", price: 3000, download: "" },
+    "kit-dashboard": { name: "Motion Dashboard", price: 3000, download: "" },
+    "kit-login": { name: "Login Page Speed Build", price: 1500, download: "" },
     "plan-bundle": { name: "Bundle — any 5 UI kits", price: 499, download: "" },
     "plan-all-access": { name: "All-access — 1 month", price: 299, download: "" },
   };
