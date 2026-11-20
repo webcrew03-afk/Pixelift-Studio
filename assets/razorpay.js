@@ -23,7 +23,7 @@
   // `download` is where the buyer is sent after a successful payment —
   // replace with your real file links (Google Drive, Gumroad file, S3, etc.).
   var PRODUCTS = {
-    "kit-dashboard": { name: "Motion Dashboard", price: 3000, download: "" },
+    "kit-dashboard": { name: "Motion Dashboard", price: 3000, secure: true },
     "plan-bundle": { name: "Bundle — any 5 UI kits", price: 499, download: "" },
     "plan-all-access": { name: "All-access — 1 month", price: 299, download: "" },
   };
@@ -84,7 +84,7 @@
         notes: { product_id: productId },
         theme: { color: RAZORPAY_CONFIG.themeColor },
         handler: function (response) {
-          onSuccess(product, response);
+          onSuccess(productId, product, response);
         },
         modal: { confirm_close: true },
       });
@@ -101,16 +101,19 @@
     });
   }
 
-  function onSuccess(product, response) {
+  function onSuccess(productId, product, response) {
     var id = response.razorpay_payment_id;
+    var href = product.secure
+      ? "/api/download?kit=" + encodeURIComponent(productId) + "&payment_id=" + encodeURIComponent(id)
+      : product.download;
     var body =
       "Thanks for buying " + product.name + ". Your payment ID is " + id +
       " — keep it for support. A receipt has been emailed to you.";
     showModal({
       title: "Payment successful 🎉",
       body: body,
-      action: product.download ? { label: "Download now", href: product.download } : null,
-      footnote: product.download ? "" : "We'll email your download link shortly.",
+      action: href ? { label: "Download now", href: href } : null,
+      footnote: href ? "Bookmark this link — it works for 30 days." : "We'll email your download link shortly.",
     });
   }
 
