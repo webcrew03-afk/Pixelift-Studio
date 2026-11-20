@@ -59,6 +59,16 @@ export async function handleDownload(request, env) {
       ["RAZORPAY_KEY_SECRET", env.RAZORPAY_KEY_SECRET ? "OK" : "MISSING"],
       ["KIT_DASHBOARD_URL", raw ? (driveDirect(raw) ? "OK" : "set, but not a valid https / Google Drive link") : "MISSING"],
     ];
+    if (env.RAZORPAY_KEY_ID && env.RAZORPAY_KEY_SECRET) {
+      let status = "unreachable";
+      try {
+        const r = await fetch("https://api.razorpay.com/v1/payments?count=1", {
+          headers: { Authorization: "Basic " + btoa(`${String(env.RAZORPAY_KEY_ID).trim()}:${String(env.RAZORPAY_KEY_SECRET).trim()}`) },
+        });
+        status = r.ok ? "OK" : r.status === 401 ? "REJECTED — Key Secret doesn't match the Key ID" : `error ${r.status}`;
+      } catch (e) {}
+      rows.push(["Razorpay login", status]);
+    }
     return page(200, "Download setup check", rows.map((r) => `${r[0]}: ${r[1]}`).join("  ·  "));
   }
   const kit = url.searchParams.get("kit") || "";
@@ -73,7 +83,7 @@ export async function handleDownload(request, env) {
     return page(503, "Downloads are being set up", `Your payment is safe. Email ${SUPPORT_EMAIL} with your payment ID (${paymentId}) and we'll send your files.`);
   }
 
-  const auth = "Basic " + btoa(`${env.RAZORPAY_KEY_ID}:${env.RAZORPAY_KEY_SECRET}`);
+  const auth = "Basic " + btoa(`${String(env.RAZORPAY_KEY_ID).trim()}:${String(env.RAZORPAY_KEY_SECRET).trim()}`);
   const api = `https://api.razorpay.com/v1/payments/${paymentId}`;
 
   let payment;
