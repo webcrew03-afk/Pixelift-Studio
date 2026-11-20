@@ -24,6 +24,16 @@ const PRODUCTS = {
 const COUPONS = {
   INSTA: 10000, // ₹100 off
 };
+// Private codes by SHA-256 hash → final amount in paise. Keep in sync with
+// PRIVATE_CODES in assets/razorpay.js. Remove after testing.
+const PRIVATE_CODES = {
+  "179471ae6bf94dbc09e2bc73ffb3952e73c797d9cfc9b1e7a9f99d47a1598146": 100, // test purchase ₹1
+};
+
+async function sha256(text) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 const LINK_VALID_DAYS = 30;
 const SUPPORT_EMAIL = "hello@pixelift.studio";
@@ -59,7 +69,8 @@ export async function handleDownload(request, env) {
 
   const notes = payment.notes || {};
   const coupon = String(notes.coupon || "").toUpperCase();
-  const expected = Math.max(100, product.amount - (COUPONS[coupon] || 0));
+  const priv = coupon ? PRIVATE_CODES[await sha256(coupon)] : undefined;
+  const expected = priv !== undefined ? priv : Math.max(100, product.amount - (COUPONS[coupon] || 0));
   if (payment.amount !== expected || payment.currency !== "INR" || notes.product_id !== kit) {
     return page(403, "Payment doesn't match this kit", `Email ${SUPPORT_EMAIL} with your payment ID (${paymentId}) and we'll sort it out.`);
   }

@@ -31,6 +31,11 @@
   var COUPONS = {
     INSTA: { off: 100, label: "Instagram offer" },
   };
+  // Private codes: only a SHA-256 hash is stored, so the code itself stays secret.
+  // `price` is the final price in rupees. Remove after testing.
+  var PRIVATE_CODES = {
+    "179471ae6bf94dbc09e2bc73ffb3952e73c797d9cfc9b1e7a9f99d47a1598146": { price: 1, label: "Test purchase" },
+  };
 
   // Direct-checkout links, e.g. https://pixeliftstudio.uk/?buy=dashboard&code=INSTA&src=reel12
   // buy  = product slug (opens the order screen right away)
@@ -42,9 +47,21 @@
   var SOURCE = (params.get("src") || params.get("utm_source") || "").slice(0, 40);
 
   function inr(n) { return "₹" + Number(n).toLocaleString("en-IN"); }
-  function findCoupon(code) {
+  function sha256(text) {
+    if (!(window.crypto && crypto.subtle && window.TextEncoder)) return Promise.resolve("");
+    return crypto.subtle.digest("SHA-256", new TextEncoder().encode(text)).then(function (buf) {
+      return Array.prototype.map.call(new Uint8Array(buf), function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+    });
+  }
+  // Resolves to { code, off, label } or null. `off` is rupees off `price`.
+  function findCoupon(code, price) {
     code = String(code || "").trim().toUpperCase();
-    return COUPONS[code] ? { code: code, off: COUPONS[code].off, label: COUPONS[code].label } : null;
+    if (!code) return Promise.resolve(null);
+    if (COUPONS[code]) return Promise.resolve({ code: code, off: COUPONS[code].off, label: COUPONS[code].label });
+    return sha256(code).then(function (h) {
+      var pc = PRIVATE_CODES[h];
+      return pc ? { code: code, off: Math.max(0, price - pc.price), label: pc.label } : null;
+    });
   }
 
   var sdkPromise = null;
@@ -123,7 +140,7 @@
     var product = PRODUCTS[productId];
     if (!product) return;
     injectStyles();
-    var coupon = findCoupon(presetCode);
+    var coupon = null;
 
     var overlay = el("div", "rzp-px-overlay");
     overlay.setAttribute("role", "dialog");
@@ -140,7 +157,7 @@
     var input = el("input");
     input.type = "text"; input.placeholder = "Discount code"; input.autocomplete = "off";
     input.setAttribute("aria-label", "Discount code");
-    input.value = coupon ? coupon.code : (presetCode || "");
+    input.value = presetCode || "";
     var apply = el("button", "rzp-px-btn ghost", "Apply");
     apply.type = "submit";
     form.appendChild(input); form.appendChild(apply);
@@ -168,10 +185,13 @@
     function applyCode() {
       var v = input.value.trim();
       if (!v) { coupon = null; msg.textContent = ""; msg.className = "rzp-px-msg"; render(); return; }
-      var c = findCoupon(v);
-      if (c) { coupon = c; msg.textContent = "✓ " + c.code + " applied — you save " + inr(c.off); msg.className = "rzp-px-msg ok"; }
-      else { coupon = null; msg.textContent = "That code isn't valid."; msg.className = "rzp-px-msg err"; }
-      render();
+      apply.disabled = true;
+      findCoupon(v, product.price).then(function (c) {
+        apply.disabled = false;
+        if (c) { coupon = c; msg.textContent = "✓ " + c.code + " applied — you save " + inr(c.off); msg.className = "rzp-px-msg ok"; }
+        else { coupon = null; msg.textContent = "That code isn't valid."; msg.className = "rzp-px-msg err"; }
+        render();
+      });
     }
     if (presetCode) applyCode(); else render();
 
