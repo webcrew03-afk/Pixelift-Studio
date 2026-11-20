@@ -4,17 +4,20 @@
  * After a buyer pays, the site sends them to:
  *   /api/download?kit=kit-dashboard&payment_id=pay_XXXX
  * This function asks Razorpay whether that payment is real, paid in full
- * and for this kit, then streams the zip from a PRIVATE Cloudflare R2 bucket.
+ * and for this kit, then sends the buyer to the file.
  *
- * Cloudflare setup:
- *   - R2 bucket "pixelift-kits" (private) holding the zip named below,
- *     bound as KITS in wrangler.jsonc
- *   - Worker secret RAZORPAY_KEY_SECRET (Settings → Variables and Secrets)
- *   - RAZORPAY_KEY_ID is set in wrangler.jsonc (it is public)
+ * Where the file lives (either works):
+ *   - Google Drive (free): set a Worker secret named after the product's
+ *     `urlSecret` (e.g. KIT_DASHBOARD_URL) to the Drive share link. The link
+ *     is never in public code; buyers only reach it after paying.
+ *   - Cloudflare R2: bind a bucket as KITS holding the zip named below.
+ *
+ * Also needed: Worker secret RAZORPAY_KEY_SECRET (Settings → Variables and
+ * Secrets). RAZORPAY_KEY_ID is set in wrangler.jsonc (it is public).
  */
 
 const PRODUCTS = {
-  "kit-dashboard": { name: "Motion Dashboard", file: "motion-dashboard.zip", amount: 90000 }, // paise (₹900)
+  "kit-dashboard": { name: "Motion Dashboard", file: "motion-dashboard.zip", urlSecret: "KIT_DASHBOARD_URL", amount: 90000 }, // paise (₹900)
 };
 
 // Discount codes in paise off. Keep in sync with COUPONS in assets/razorpay.js.
@@ -34,7 +37,8 @@ export async function handleDownload(request, env) {
   if (!product || !/^pay_[A-Za-z0-9]{6,40}$/.test(paymentId)) {
     return page(400, "Invalid download link", "This link is incomplete. Please use the Download button shown after payment.");
   }
-  if (!env.KITS || !env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
+  const fileUrl = driveDirect(env[product.urlSecret]);
+  if ((!env.KITS && !fileUrl) || !env.RAZORPAY_KEY_ID || !env.RAZORPAY_KEY_SECRET) {
     return page(503, "Downloads are being set up", `Your payment is safe. Email ${SUPPORT_EMAIL} with your payment ID (${paymentId}) and we'll send your files.`);
   }
 
@@ -78,6 +82,10 @@ export async function handleDownload(request, env) {
     return page(410, "Download link expired", `Email ${SUPPORT_EMAIL} with your payment ID (${paymentId}) for a fresh copy.`);
   }
 
+  if (fileUrl) {
+    return new Response(null, { status: 302, headers: { Location: fileUrl, "Cache-Control": "private, no-store", "X-Robots-Tag": "noindex", "Referrer-Policy": "no-referrer" } });
+  }
+
   const obj = await env.KITS.get(product.file);
   if (!obj) {
     return page(503, "File temporarily unavailable", `Your payment is confirmed. Email ${SUPPORT_EMAIL} with your payment ID (${paymentId}) and we'll send the files right away.`);
@@ -92,6 +100,15 @@ export async function handleDownload(request, env) {
       "X-Robots-Tag": "noindex",
     },
   });
+}
+
+// Turn a Google Drive share link into a direct-download link; other URLs pass through.
+function driveDirect(link) {
+  if (!link) return "";
+  link = String(link).trim();
+  const m = link.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|uc\?(?:[^#]*&)?id=)([A-Za-z0-9_-]{10,})/);
+  if (m) return `https://drive.google.com/uc?export=download&id=${m[1]}`;
+  return /^https:\/\//.test(link) ? link : "";
 }
 
 function page(status, title, message) {
