@@ -3,6 +3,8 @@
   "name": "pixelift-studio",
   "main": "worker/index.js",
   "compatibility_date": "2025-06-01",
+  // Keep variables added in the Cloudflare dashboard when deploying from GitHub
+  "keep_vars": true,
   "assets": {
     "directory": ".",
     "binding": "ASSETS",
