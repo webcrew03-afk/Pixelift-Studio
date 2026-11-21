@@ -23,13 +23,13 @@
   // `download` is where the buyer is sent after a successful payment —
   // replace with your real file links (Google Drive, Gumroad file, S3, etc.).
   var PRODUCTS = {
-    "kit-dashboard": { name: "Motion Dashboard", price: 900, secure: true, slug: "dashboard" },
+    "kit-dashboard": { name: "Motion Dashboard", price: 2500, secure: true, slug: "dashboard" },
   };
 
   // Discount codes: rupees off the price. Keep in sync with COUPONS in worker/download.js.
   // These are visible to anyone reading this file, so only use codes you share publicly.
   var COUPONS = {
-    INSTA: { off: 100, label: "Instagram offer" },
+    PIXELINSTA: { off: 1500, label: "Instagram offer" }, // ₹2,500 → ₹1,000
   };
   // Private codes: only a SHA-256 hash is stored, so the code itself stays secret.
   // `price` is the final price in rupees. Remove after testing.
@@ -37,7 +37,7 @@
     "179471ae6bf94dbc09e2bc73ffb3952e73c797d9cfc9b1e7a9f99d47a1598146": { price: 1, label: "Test purchase" },
   };
 
-  // Direct-checkout links, e.g. https://pixeliftstudio.uk/?buy=dashboard&code=INSTA&src=reel12
+  // Direct-checkout links, e.g. https://pixeliftstudio.uk/?buy=dashboard&code=PIXELINSTA&src=reel12
   // buy  = product slug (opens the order screen right away)
   // code = discount code to pre-apply (optional)
   // src  = where the buyer came from; saved on the Razorpay payment (optional)
@@ -55,7 +55,7 @@
   }
   // Resolves to { code, off, label } or null. `off` is rupees off `price`.
   function findCoupon(code, price) {
-    code = String(code || "").trim().toUpperCase();
+    code = String(code || "").toUpperCase().replace(/\s+/g, ""); // "Pixel Insta" → "PIXELINSTA"
     if (!code) return Promise.resolve(null);
     if (COUPONS[code]) return Promise.resolve({ code: code, off: COUPONS[code].off, label: COUPONS[code].label });
     return sha256(code).then(function (h) {

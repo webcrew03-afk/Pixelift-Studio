@@ -27,14 +27,14 @@ const PRODUCTS = {
     name: "Motion Dashboard",
     file: "motion-dashboard.zip",
     urlSecret: "KIT_DASHBOARD_URL",
-    amount: 90000, // paise (₹900)
+    amount: 250000, // paise (₹2,500)
     blurb: "One analytics dashboard with 15 buttery micro-animations — full HTML, CSS & JS source with a README.",
   },
 };
 
 // Discount codes in paise off. Keep in sync with COUPONS in assets/razorpay.js.
 const COUPONS = {
-  INSTA: 10000, // ₹100 off
+  PIXELINSTA: 150000, // ₹1,500 off → ₹1,000
 };
 // Private codes by SHA-256 hash → final amount in paise. Keep in sync with
 // PRIVATE_CODES in assets/razorpay.js. Remove after testing.
@@ -135,7 +135,7 @@ async function verifyPayment(env, kit, paymentId) {
   payment = await res.json();
 
   const notes = payment.notes || {};
-  const coupon = String(notes.coupon || "").toUpperCase();
+  const coupon = String(notes.coupon || "").toUpperCase().replace(/\s+/g, "");
   const priv = coupon ? PRIVATE_CODES[await sha256(coupon)] : undefined;
   const expected = priv !== undefined ? priv : Math.max(100, product.amount - (COUPONS[coupon] || 0));
   if (payment.amount !== expected || payment.currency !== "INR" || notes.product_id !== kit) {
