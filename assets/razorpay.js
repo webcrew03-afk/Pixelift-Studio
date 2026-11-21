@@ -91,13 +91,16 @@
     return null;
   }
 
-  function openCheckout(productId, coupon) {
+  function openCheckout(productId, coupon, buyer) {
+    buyer = buyer || {};
     var product = PRODUCTS[productId];
     if (!product) return;
     var amount = Math.max(1, product.price - (coupon ? coupon.off : 0));
     var notes = { product_id: productId };
     if (coupon) notes.coupon = coupon.code;
     if (SOURCE) notes.source = SOURCE;
+    if (buyer.name) notes.buyer_name = buyer.name.slice(0, 80);
+    if (buyer.email) notes.buyer_email = buyer.email.slice(0, 120);
 
     if (RAZORPAY_CONFIG.key.indexOf("REPLACE") !== -1) {
       showModal({
@@ -116,6 +119,7 @@
         description: product.name + (coupon ? " (" + coupon.code + ")" : ""),
         image: RAZORPAY_CONFIG.logo || undefined,
         notes: notes,
+        prefill: { name: buyer.name || "", email: buyer.email || "" },
         theme: { color: RAZORPAY_CONFIG.themeColor },
         handler: function (response) {
           onSuccess(productId, product, response);
@@ -153,6 +157,17 @@
     var price = el("b", "rzp-px-price");
     line.appendChild(lbl); line.appendChild(price);
 
+    var saved = {};
+    try { saved = JSON.parse(localStorage.getItem("px_buyer") || "{}"); } catch (e) {}
+    var fields = el("div", "rzp-px-fields");
+    var nameIn = el("input"); nameIn.type = "text"; nameIn.placeholder = "Your name"; nameIn.autocomplete = "name";
+    nameIn.setAttribute("aria-label", "Your name"); nameIn.value = saved.name || "";
+    var emailIn = el("input"); emailIn.type = "email"; emailIn.placeholder = "Email — your download link is sent here"; emailIn.autocomplete = "email";
+    emailIn.setAttribute("aria-label", "Email"); emailIn.value = saved.email || "";
+    fields.appendChild(nameIn); fields.appendChild(emailIn);
+    var fieldMsg = el("p", "rzp-px-msg err");
+    [nameIn, emailIn].forEach(function (i) { i.addEventListener("input", function () { fieldMsg.textContent = ""; }); });
+
     var form = el("form", "rzp-px-code");
     var input = el("input");
     input.type = "text"; input.placeholder = "Discount code"; input.autocomplete = "off";
@@ -171,7 +186,7 @@
     row.appendChild(pay); row.appendChild(cancel);
     var secure = el("p", "rzp-px-note", "🔒 Secure payment by Razorpay · UPI, cards, netbanking. Instant download after payment.");
 
-    [kicker, title, line, form, msg, row, secure].forEach(function (n) { box.appendChild(n); });
+    [kicker, title, line, fields, fieldMsg, form, msg, row, secure].forEach(function (n) { box.appendChild(n); });
     overlay.appendChild(box);
     document.body.appendChild(overlay);
 
@@ -198,11 +213,18 @@
     function dismiss() { overlay.remove(); document.removeEventListener("keydown", onKey); }
     function onKey(e) { if (e.key === "Escape") dismiss(); }
     form.addEventListener("submit", function (e) { e.preventDefault(); applyCode(); });
-    pay.addEventListener("click", function () { dismiss(); openCheckout(productId, coupon); });
+    pay.addEventListener("click", function () {
+      var buyer = { name: nameIn.value.trim(), email: emailIn.value.trim() };
+      if (!buyer.name) { fieldMsg.textContent = "Please enter your name."; nameIn.focus(); return; }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(buyer.email)) { fieldMsg.textContent = "Please enter a valid email — your download link is sent there."; emailIn.focus(); return; }
+      fieldMsg.textContent = "";
+      try { localStorage.setItem("px_buyer", JSON.stringify(buyer)); } catch (e) {}
+      dismiss(); openCheckout(productId, coupon, buyer);
+    });
     cancel.addEventListener("click", dismiss);
     overlay.addEventListener("click", function (e) { if (e.target === overlay) dismiss(); });
     document.addEventListener("keydown", onKey);
-    pay.focus();
+    (nameIn.value ? (emailIn.value ? pay : emailIn) : nameIn).focus();
   }
 
   function el(tag, cls, text) {
@@ -217,15 +239,21 @@
     var href = product.secure
       ? "/api/download?kit=" + encodeURIComponent(productId) + "&payment_id=" + encodeURIComponent(id)
       : product.download;
-    var body =
-      "Thanks for buying " + product.name + ". Your payment ID is " + id +
-      " — keep it for support. A receipt has been emailed to you.";
-    showModal({
+    var modal = showModal({
       title: "Payment successful 🎉",
-      body: body,
+      body: "Thanks for buying " + product.name + "! Payment ID: " + id + ".",
       action: href ? { label: "Download now", href: href } : null,
-      footnote: href ? "Bookmark this link — it works for 30 days." : "We'll email your download link shortly.",
+      footnote: product.secure ? "Sending your download link by email…" : "We'll email your download link shortly.",
     });
+    if (!product.secure) return;
+    fetch("/api/fulfill", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kit: productId, payment_id: id }) })
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        modal.setFootnote(d && d.emailed
+          ? "✓ We've emailed your download link" + (d.email ? " to " + d.email : "") + ". It works for 30 days."
+          : "Save this page or your payment ID — the Download button works for 30 days. Need help? " + RAZORPAY_CONFIG.supportEmail);
+      })
+      .catch(function () { modal.setFootnote("The Download button works for 30 days. Need help? " + RAZORPAY_CONFIG.supportEmail); });
   }
 
   // ---------- Small modal that matches the site's dark theme ----------
@@ -251,7 +279,13 @@
       ".rzp-px-code .rzp-px-btn{height:46px;padding:0 18px}" +
       ".rzp-px-box p.rzp-px-msg{min-height:20px;margin:8px 0 14px;font-size:13px}" +
       ".rzp-px-box p.rzp-px-msg.ok{color:#2dd4bf}.rzp-px-box p.rzp-px-msg.err{color:#ff5c8a}" +
-      ".rzp-px-pay{flex:1}";
+      ".rzp-px-pay{flex:1}" +
+      ".rzp-px-fields{display:grid;gap:8px}" +
+      ".rzp-px-fields input{height:46px;border-radius:12px;border:1px solid var(--line2,rgba(255,255,255,.14));background:rgba(0,0,0,.25);color:var(--text,#f4f2fb);padding:0 14px;font:500 15px Inter,system-ui,sans-serif}" +
+      ".rzp-px-fields input::placeholder{color:#77738e}" +
+      ".rzp-px-fields input:focus{outline:none;border-color:var(--purple,#8b5cf6);box-shadow:0 0 0 3px rgba(139,92,246,.25)}" +
+      ".rzp-px-box p.rzp-px-msg.err:empty{display:none}" +
+      ".rzp-px-box p.rzp-px-msg.err{margin:8px 0 6px}";
     var style = document.createElement("style");
     style.id = "rzp-px-styles";
     style.textContent = css;
@@ -293,12 +327,10 @@
     row.appendChild(close);
     box.appendChild(row);
 
-    if (opts.footnote) {
-      var n = document.createElement("p");
-      n.className = "rzp-px-note";
-      n.textContent = opts.footnote;
-      box.appendChild(n);
-    }
+    var n = document.createElement("p");
+    n.className = "rzp-px-note";
+    n.textContent = opts.footnote || "";
+    if (opts.footnote) box.appendChild(n);
 
     function dismiss() {
       overlay.remove();
@@ -312,6 +344,7 @@
     overlay.appendChild(box);
     document.body.appendChild(overlay);
     close.focus();
+    return { setFootnote: function (t) { n.textContent = t; if (!n.parentNode) box.appendChild(n); } };
   }
 
   // Capture phase so we run before the app's own scroll handlers.
