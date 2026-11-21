@@ -12,7 +12,7 @@
   "use strict";
 
   var RAZORPAY_CONFIG = {
-    key: "rzp_live_U2UmdUhr1QCTTZ",
+    key: "rzp_live_U2flCuJa3INWiY",
     businessName: "Pixelift Studio",
     logo: "", // optional: absolute URL of a square logo
     themeColor: "#8b5cf6",

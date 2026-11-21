@@ -40,7 +40,7 @@ const PRIVATE_CODES = {
 };
 
 // Public Razorpay Key ID (same as in assets/razorpay.js). The Key SECRET is a Worker secret.
-const RAZORPAY_KEY_ID = "rzp_live_U2UmdUhr1QCTTZ";
+const RAZORPAY_KEY_ID = "rzp_live_U2flCuJa3INWiY";
 
 const SITE = "https://pixeliftstudio.uk";
 const LINK_VALID_DAYS = 30;
