@@ -3,7 +3,7 @@ import { handleDownload, handleFulfill } from "./download.js";
 const SHORT_LINKS = {
   "/dashboard": "/?buy=dashboard",
   "/buy": "/?buy=dashboard",
-  "/insta": "/?buy=dashboard&code=INSTA&src=instagram",
+  "/insta": "/?buy=dashboard&code=PIXELINSTA&src=instagram",
 };
 
 export default {
