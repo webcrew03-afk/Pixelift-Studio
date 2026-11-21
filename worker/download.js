@@ -14,7 +14,10 @@
  * (type: Secret):
  *   RAZORPAY_KEY_SECRET  Live Key Secret matching RAZORPAY_KEY_ID below
  *   KIT_DASHBOARD_URL    Google Drive share link to the zip ("Anyone with the link")
- *   RESEND_API_KEY       resend.com API key, for the purchase email
+ *   EMAIL_SCRIPT_URL     Google Apps Script web-app URL that sends the purchase email
+ *                        from your Gmail (see tools/gmail-sender.gs)
+ *   EMAIL_SCRIPT_TOKEN   the password set in that script
+ *   RESEND_API_KEY       optional alternative: resend.com API key
  *   EMAIL_FROM           optional, default "Pixelift Studio <orders@pixeliftstudio.uk>"
  *   EMAIL_REPLY_TO       optional, default hello@pixelift.studio
  */
@@ -88,7 +91,7 @@ export async function handleFulfill(request, env) {
   const out = { ok: true, download_url: downloadUrl, email: maskEmail(to), emailed: false };
 
   if ((payment.notes || {}).emailed) return json({ ...out, emailed: true, already: true });
-  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) || !setting(env, "RESEND_API_KEY")) return json(out);
+  if (!to || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to) || !emailConfigured(env)) return json(out);
 
   const name = String((payment.notes || {}).buyer_name || "").trim();
   const sent = await sendEmail(env, {
@@ -196,7 +199,41 @@ function driveDirect(link) {
 /* Email (Resend)                                                      */
 /* ------------------------------------------------------------------ */
 
-async function sendEmail(env, { to, subject, html, text }) {
+function emailConfigured(env) {
+  return Boolean(setting(env, "RESEND_API_KEY") || (setting(env, "EMAIL_SCRIPT_URL") && setting(env, "EMAIL_SCRIPT_TOKEN")));
+}
+
+async function sendEmail(env, msg) {
+  if (setting(env, "EMAIL_SCRIPT_URL") && setting(env, "EMAIL_SCRIPT_TOKEN")) return sendViaGmailScript(env, msg);
+  if (setting(env, "RESEND_API_KEY")) return sendViaResend(env, msg);
+  return false;
+}
+
+// Your own Google Apps Script (tools/gmail-sender.gs) sends the email from your Gmail.
+async function sendViaGmailScript(env, { to, subject, html, text }) {
+  try {
+    const r = await fetch(String(setting(env, "EMAIL_SCRIPT_URL")).trim(), {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({
+        token: String(setting(env, "EMAIL_SCRIPT_TOKEN")).trim(),
+        to,
+        subject,
+        html,
+        text,
+        name: "Pixelift Studio",
+        replyTo: setting(env, "EMAIL_REPLY_TO") || "",
+      }),
+      redirect: "follow",
+    });
+    const d = await r.json().catch(() => ({}));
+    return Boolean(d && d.ok);
+  } catch (e) {
+    return false;
+  }
+}
+
+async function sendViaResend(env, { to, subject, html, text }) {
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -266,7 +303,7 @@ async function setupCheck(env) {
     ["Key ID (in code)", RAZORPAY_KEY_ID.slice(0, 13) + "…"],
     ["RAZORPAY_KEY_SECRET", secret ? "OK" : "MISSING"],
     ["KIT_DASHBOARD_URL", raw ? (driveDirect(raw) ? "OK" : "set, but not a valid https / Google Drive link") : "MISSING"],
-    ["RESEND_API_KEY (email)", setting(env, "RESEND_API_KEY") ? "OK" : "MISSING — buyers won't get an email"],
+    ["Email", setting(env, "EMAIL_SCRIPT_URL") ? (setting(env, "EMAIL_SCRIPT_TOKEN") ? "Gmail script set" : "EMAIL_SCRIPT_TOKEN MISSING") : setting(env, "RESEND_API_KEY") ? "Resend set" : "not set up — buyers won't get an email"],
   ];
   if (secret) {
     let status = "unreachable";
