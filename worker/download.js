@@ -39,7 +39,7 @@ const COUPONS = {
 // Private codes by SHA-256 hash → final amount in paise. Keep in sync with
 // PRIVATE_CODES in assets/razorpay.js. Remove after testing.
 const PRIVATE_CODES = {
-  "179471ae6bf94dbc09e2bc73ffb3952e73c797d9cfc9b1e7a9f99d47a1598146": 100, // test purchase ₹1
+  "045d061d495c8c2113c6760b931550641e807a8d61763a98b8c53f097f1e639e": 100, // test purchase ₹1
 };
 
 // Public Razorpay Key ID (same as in assets/razorpay.js). The Key SECRET is a Worker secret.
