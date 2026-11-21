@@ -96,7 +96,7 @@ export async function handleFulfill(request, env) {
   const name = String((payment.notes || {}).buyer_name || "").trim();
   const sent = await sendEmail(env, {
     to,
-    subject: `Your ${product.name} download — Pixelift Studio`,
+    subject: `Your Pixelift order: ${product.name}`,
     html: emailHtml({ name, product, downloadUrl, paymentId, amount: payment.amount }),
     text: emailText({ name, product, downloadUrl, paymentId }),
   });
@@ -253,43 +253,43 @@ async function sendViaResend(env, { to, subject, html, text }) {
   }
 }
 
+// Kept deliberately simple (light, mostly text, one link) — heavy dark HTML and big
+// buttons look like marketing to spam filters.
 function emailHtml({ name, product, downloadUrl, paymentId, amount }) {
-  const hi = name ? `Hi ${esc(name.split(" ")[0])},` : "Hi there,";
-  return `<!doctype html><html><body style="margin:0;background:#07070d;padding:32px 16px;font-family:Inter,Segoe UI,Arial,sans-serif;color:#f4f2fb">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr><td align="center">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:520px;background:#12121c;border:1px solid #2a2a3a;border-radius:20px">
-<tr><td style="padding:32px 32px 8px"><div style="font-size:18px;font-weight:700">Pixelift<span style="color:#9b97ad;font-weight:500">.studio</span></div></td></tr>
-<tr><td style="padding:16px 32px 0">
-<p style="margin:0 0 6px;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#14b8a6;font-weight:700">Order confirmed</p>
-<h1 style="margin:0 0 16px;font-size:26px;line-height:1.2">Your ${esc(product.name)} is ready 🎉</h1>
-<p style="margin:0 0 12px;font-size:15px;line-height:1.6;color:#c9c6d8">${hi}</p>
-<p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#c9c6d8">Thanks for your purchase! ${esc(product.blurb)}</p>
-<a href="${esc(downloadUrl)}" style="display:inline-block;padding:14px 28px;border-radius:99px;background:#8b5cf6;background-image:linear-gradient(90deg,#ff3d7f,#8b5cf6);color:#ffffff;font-weight:700;font-size:16px;text-decoration:none">Download ${esc(product.file)}</a>
-<p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#9b97ad">The link works for ${LINK_VALID_DAYS} days. Unzip the folder and open <b>index.html</b> — the README explains every animation.</p>
-</td></tr>
-<tr><td style="padding:24px 32px 32px">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-top:1px solid #2a2a3a;font-size:13px;color:#9b97ad">
-<tr><td style="padding-top:16px">Payment ID</td><td align="right" style="padding-top:16px;color:#f4f2fb">${esc(paymentId)}</td></tr>
-<tr><td style="padding-top:6px">Amount</td><td align="right" style="padding-top:6px;color:#f4f2fb">₹${(amount / 100).toLocaleString("en-IN")}</td></tr>
-</table>
-<p style="margin:20px 0 0;font-size:13px;line-height:1.6;color:#9b97ad">Questions? Just reply to this email.</p>
-</td></tr></table>
-<p style="margin:16px 0 0;font-size:12px;color:#6e6a85">© Pixelift Studio · pixeliftstudio.uk</p>
-</td></tr></table></body></html>`;
+  const first = name ? esc(name.split(" ")[0]) : "there";
+  const price = `₹${(amount / 100).toLocaleString("en-IN")}`;
+  return `<!doctype html><html><body style="margin:0;padding:24px 16px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#222222;font-size:15px;line-height:1.6">
+<div style="max-width:560px;margin:0 auto">
+<p style="margin:0 0 16px">Hi ${first},</p>
+<p style="margin:0 0 16px">Thank you for buying <b>${esc(product.name)}</b> from Pixelift Studio. Your files are ready.</p>
+<p style="margin:0 0 8px"><a href="${esc(downloadUrl)}" style="color:#5b3fd6;font-weight:bold">Download ${esc(product.file)}</a></p>
+<p style="margin:0 0 16px;font-size:13px;color:#555555">If the link doesn't open, copy this address into your browser:<br><span style="word-break:break-all">${esc(downloadUrl)}</span></p>
+<p style="margin:0 0 16px">Unzip the folder and open <b>index.html</b>. The README explains every animation. The link works for ${LINK_VALID_DAYS} days.</p>
+<p style="margin:0 0 16px;font-size:13px;color:#555555">Order details: ${esc(product.name)} · ${price} · Payment ID ${esc(paymentId)}</p>
+<p style="margin:0 0 4px">If you have any questions, just reply to this email.</p>
+<p style="margin:0 0 24px">Thanks,<br>Pixelift Studio</p>
+<p style="margin:0;font-size:12px;color:#888888">You're receiving this email because you bought ${esc(product.name)} on pixeliftstudio.uk.</p>
+</div></body></html>`;
 }
 
 function emailText({ name, product, downloadUrl, paymentId }) {
-  return `${name ? `Hi ${name.split(" ")[0]},` : "Hi there,"}
+  return `Hi ${name ? name.split(" ")[0] : "there"},
 
-Thanks for buying ${product.name} from Pixelift Studio!
+Thank you for buying ${product.name} from Pixelift Studio. Your files are ready.
 
-Download your files (link works for ${LINK_VALID_DAYS} days):
+Download ${product.file}:
 ${downloadUrl}
+
+Unzip the folder and open index.html. The README explains every animation. The link works for ${LINK_VALID_DAYS} days.
 
 Payment ID: ${paymentId}
 
-Questions? Just reply to this email.
-— Pixelift Studio`;
+If you have any questions, just reply to this email.
+
+Thanks,
+Pixelift Studio
+
+You're receiving this email because you bought ${product.name} on pixeliftstudio.uk.`;
 }
 
 /* ------------------------------------------------------------------ */
