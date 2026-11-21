@@ -34,7 +34,7 @@
   // Private codes: only a SHA-256 hash is stored, so the code itself stays secret.
   // `price` is the final price in rupees. Remove after testing.
   var PRIVATE_CODES = {
-    "179471ae6bf94dbc09e2bc73ffb3952e73c797d9cfc9b1e7a9f99d47a1598146": { price: 1, label: "Test purchase" },
+    "045d061d495c8c2113c6760b931550641e807a8d61763a98b8c53f097f1e639e": { price: 1, label: "Test purchase" },
   };
 
   // Direct-checkout links, e.g. https://pixeliftstudio.uk/?buy=dashboard&code=PIXELINSTA&src=reel12
