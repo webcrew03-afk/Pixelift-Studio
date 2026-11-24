@@ -22,6 +22,9 @@
  */
 
 var TOKEN = "CHANGE_ME";
+// Where to send "new form entry" and "new sale" alerts. Set it to your own email in
+// your copy of this script only — never commit your real address.
+var NOTIFY_EMAIL = "you@example.com";
 
 function doPost(e) {
   try {
@@ -32,7 +35,8 @@ function doPost(e) {
     var opts = { to: d.to, subject: String(d.subject || "Your download"), htmlBody: String(d.html || ""), body: String(d.text || ""), name: d.name || "Pixelift Studio" };
     if (d.replyTo) opts.replyTo = d.replyTo;
     MailApp.sendEmail(opts);
-    if (d.lead) { try { logLead(d.lead); } catch (err) {} }
+    if (d.lead) { try { logLead(d.lead); } catch (err) {} try { notifyLead(d.lead); } catch (err) {} }
+    if (d.sale) { try { logSale(d.sale); } catch (err) {} try { notifySale(d.sale); } catch (err) {} }
     return out({ ok: true, remaining: MailApp.getRemainingDailyQuota() });
   } catch (err) {
     return out({ ok: false, error: String(err) });
@@ -65,6 +69,28 @@ function leadsSheet() {
     sh.setFrozenRows(1);
   }
   return ss.getSheets()[0];
+}
+
+/** Adds a row to the "Sales" tab of the same sheet. */
+function logSale(x) {
+  var ss = leadsSheet().getParent();
+  var sh = ss.getSheetByName("Sales");
+  if (!sh) { sh = ss.insertSheet("Sales"); sh.appendRow(["Date", "Name", "Email", "Product", "Amount (₹)", "Payment ID", "Source", "Price type"]); sh.setFrozenRows(1); }
+  sh.appendRow([new Date(), x.name || "", x.email || "", x.product || "", x.amount || "", x.payment_id || "", x.src || "", x.offer || ""]);
+}
+
+function notifyLead(l) {
+  if (!NOTIFY_EMAIL || NOTIFY_EMAIL === "you@example.com") return;
+  MailApp.sendEmail(NOTIFY_EMAIL, "New form entry: " + (l.name || "someone") + " (" + (l.src || "direct") + ")",
+    "Someone asked for the code on pixeliftstudio.uk\n\nName: " + (l.name || "") + "\nEmail: " + (l.email || "") + "\nFrom: " + (l.src || "direct") +
+    "\n\nThey've been sent a personal ₹1,000 offer link (valid 48 hours).");
+}
+
+function notifySale(x) {
+  if (!NOTIFY_EMAIL || NOTIFY_EMAIL === "you@example.com") return;
+  MailApp.sendEmail(NOTIFY_EMAIL, "New sale: ₹" + x.amount + " — " + (x.name || x.email || "buyer"),
+    "New purchase on pixeliftstudio.uk\n\nProduct: " + (x.product || "") + "\nAmount: ₹" + x.amount + " (" + (x.offer || "") + ")\nName: " + (x.name || "") +
+    "\nEmail: " + (x.email || "") + "\nFrom: " + (x.src || "direct") + "\nPayment ID: " + (x.payment_id || "") + "\n\nThe buyer has been emailed their download link.");
 }
 
 /** Run once from the editor: creates the leads sheet and asks for Sheets permission. */

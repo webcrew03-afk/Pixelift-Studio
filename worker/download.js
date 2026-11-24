@@ -24,7 +24,7 @@
  *   EMAIL_SCRIPT_TOKEN   the password set in that script
  *   RESEND_API_KEY       optional alternative: resend.com API key
  *   EMAIL_FROM           optional, default "Pixelift Studio <orders@pixeliftstudio.uk>"
- *   EMAIL_REPLY_TO       optional, default webcrew03@gmail.com
+ *   EMAIL_REPLY_TO       optional, default hello@pixelift.studio
  */
 
 const PRODUCTS = {
@@ -54,7 +54,7 @@ const SITE = "https://pixeliftstudio.uk";
 const OFFER_PRICE = 100000; // paise (₹1,000) for personal offer links
 const OFFER_HOURS = 48;
 const LINK_VALID_DAYS = 30;
-const SUPPORT_EMAIL = "webcrew03@gmail.com";
+const SUPPORT_EMAIL = "hello@pixelift.studio";
 const DEFAULT_FROM = "Pixelift Studio <orders@pixeliftstudio.uk>";
 
 /* ------------------------------------------------------------------ */
@@ -106,6 +106,15 @@ export async function handleFulfill(request, env) {
     subject: `Your Pixelift order: ${product.name}`,
     html: emailHtml({ name, product, downloadUrl, paymentId, amount: payment.amount }),
     text: emailText({ name, product, downloadUrl, paymentId }),
+    sale: {
+      name,
+      email: to,
+      product: product.name,
+      amount: payment.amount / 100,
+      payment_id: paymentId,
+      src: String((payment.notes || {}).source || ""),
+      offer: (payment.notes || {}).offer ? "personal offer" : (payment.notes || {}).coupon ? "code" : "full price",
+    },
   });
   if (sent) {
     out.emailed = true;
@@ -290,7 +299,7 @@ async function sendEmail(env, msg) {
 }
 
 // Your own Google Apps Script (tools/gmail-sender.gs) sends the email from your Gmail.
-async function sendViaGmailScript(env, { to, subject, html, text, lead }) {
+async function sendViaGmailScript(env, { to, subject, html, text, lead, sale }) {
   try {
     const r = await fetch(String(setting(env, "EMAIL_SCRIPT_URL")).trim(), {
       method: "POST",
@@ -303,7 +312,8 @@ async function sendViaGmailScript(env, { to, subject, html, text, lead }) {
         text,
         name: "Pixelift Studio",
         replyTo: setting(env, "EMAIL_REPLY_TO") || "",
-        lead: lead || null, // the script logs this to your "Pixelift leads" Google Sheet
+        lead: lead || null, // the script logs this to your "Pixelift leads" sheet and notifies you
+        sale: sale || null, // the script logs this to the "Sales" tab and notifies you
       }),
       redirect: "follow",
     });
