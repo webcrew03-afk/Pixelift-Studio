@@ -24,7 +24,7 @@
  *   EMAIL_SCRIPT_TOKEN   the password set in that script
  *   RESEND_API_KEY       optional alternative: resend.com API key
  *   EMAIL_FROM           optional, default "Pixelift Studio <orders@pixeliftstudio.uk>"
- *   EMAIL_REPLY_TO       optional, default webcrew03@gmail.com
+ *   EMAIL_REPLY_TO       optional, default hello@pixelift.studio
  */
 
 const PRODUCTS = {
@@ -54,7 +54,7 @@ const SITE = "https://pixeliftstudio.uk";
 const OFFER_PRICE = 100000; // paise (₹1,000) for personal offer links
 const OFFER_HOURS = 48;
 const LINK_VALID_DAYS = 30;
-const SUPPORT_EMAIL = "webcrew03@gmail.com";
+const SUPPORT_EMAIL = "hello@pixelift.studio";
 const DEFAULT_FROM = "Pixelift Studio <orders@pixeliftstudio.uk>";
 
 /* ------------------------------------------------------------------ */
