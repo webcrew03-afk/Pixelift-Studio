@@ -1,11 +1,12 @@
-import { handleDownload, handleFulfill } from "./download.js";
+import { handleDownload, handleFulfill, handleLead, handleOffer } from "./download.js";
 
 const SHORT_LINKS = {
   "/dashboard": "/?buy=dashboard",
   "/buy": "/?buy=dashboard",
-  "/insta": "/?buy=dashboard&code=PIXELINSTA&src=instagram",
-  "/yt": "/?buy=dashboard&code=PIXELINSTA&src=youtube",
-  "/youtube": "/?buy=dashboard&code=PIXELINSTA&src=youtube",
+  // Public links go to the "Get the code" form; the offer price is only sent by email.
+  "/insta": "/get/?src=instagram",
+  "/yt": "/get/?src=youtube",
+  "/youtube": "/get/?src=youtube",
 };
 
 export default {
@@ -23,6 +24,11 @@ export default {
       if (request.method !== "GET") return new Response("Method not allowed", { status: 405 });
       return handleDownload(request, env);
     }
+    if (url.pathname === "/api/lead") {
+      if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
+      return handleLead(request, env);
+    }
+    if (url.pathname === "/api/offer") return handleOffer(request, env);
     if (url.pathname === "/api/fulfill") {
       if (request.method !== "POST") return new Response("Method not allowed", { status: 405 });
       return handleFulfill(request, env);

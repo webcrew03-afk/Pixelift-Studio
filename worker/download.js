@@ -7,6 +7,11 @@
  *   POST /api/fulfill   { kit, payment_id }
  *        Called by the site right after payment: checks the payment and
  *        emails the buyer their download link (once per payment).
+ *   POST /api/lead      { name, email, src }
+ *        "Get the code" form: emails the person a personal offer link
+ *        (₹1,000, tied to their email, valid OFFER_HOURS) and logs the lead.
+ *   GET  /api/offer?t=TOKEN
+ *        Checks a personal offer link and returns its price and email.
  *   GET  /api/download?check=1
  *        Setup check: shows which settings work (never their values).
  *
@@ -32,13 +37,13 @@ const PRODUCTS = {
   },
 };
 
-// Discount codes in paise off. Keep in sync with COUPONS in assets/razorpay.js.
-const COUPONS = {
-  PIXELINSTA: 150000, // ₹1,500 off → ₹1,000
-};
-// Private codes by SHA-256 hash → final amount in paise. Keep in sync with
-// PRIVATE_CODES in assets/razorpay.js. Remove after testing.
+// Public discount codes in paise off (none — offers are private now).
+// Keep in sync with COUPONS in assets/razorpay.js.
+const COUPONS = {};
+// Private codes by SHA-256 hash → final amount in paise. Only the hash is public.
+// Keep in sync with PRIVATE_CODES in assets/razorpay.js.
 const PRIVATE_CODES = {
+  "1c0924e6ec8f1709e1d9271bd154f071c05fa2d9e14e06a82e27d45e1f6e96e5": 100000, // private Instagram DM code → ₹1,000
   "045d061d495c8c2113c6760b931550641e807a8d61763a98b8c53f097f1e639e": 100, // test purchase ₹1
 };
 
@@ -46,6 +51,8 @@ const PRIVATE_CODES = {
 const RAZORPAY_KEY_ID = "rzp_live_U2flCuJa3INWiY";
 
 const SITE = "https://pixeliftstudio.uk";
+const OFFER_PRICE = 100000; // paise (₹1,000) for personal offer links
+const OFFER_HOURS = 48;
 const LINK_VALID_DAYS = 30;
 const SUPPORT_EMAIL = "hello@pixelift.studio";
 const DEFAULT_FROM = "Pixelift Studio <orders@pixeliftstudio.uk>";
@@ -108,6 +115,71 @@ export async function handleFulfill(request, env) {
   return json(out);
 }
 
+export async function handleLead(request, env) {
+  let b = {};
+  try { b = await request.json(); } catch (e) {}
+  const name = String(b.name || "").trim().slice(0, 80);
+  const email = String(b.email || "").trim().toLowerCase().slice(0, 80);
+  const src = String(b.src || "").replace(/[^a-z0-9_-]/gi, "").slice(0, 30) || "direct";
+  if (b.website) return json({ ok: true }); // honeypot: bots fill hidden fields
+  if (!name) return json({ ok: false, error: "Please enter your name." }, 400);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return json({ ok: false, error: "Please enter a valid email." }, 400);
+  if (!emailConfigured(env) || !keySecret(env)) return json({ ok: false, error: "Offers are being set up. Please try again soon." }, 503);
+
+  const exp = Math.floor(Date.now() / 1000) + OFFER_HOURS * 3600;
+  const token = await makeOffer(env, email, exp, src);
+  const link = `${SITE}/?buy=dashboard&offer=${token}`;
+  const product = PRODUCTS["kit-dashboard"];
+  const sent = await sendEmail(env, {
+    to: email,
+    subject: `Your Pixelift offer: ${product.name} at ${rupees(OFFER_PRICE)}`,
+    html: offerEmailHtml({ name, product, link }),
+    text: offerEmailText({ name, product, link }),
+    lead: { name, email, src },
+  });
+  if (!sent) return json({ ok: false, error: "We couldn't send the email. Please try again in a minute." }, 502);
+  return json({ ok: true, email: maskEmail(email), hours: OFFER_HOURS });
+}
+
+export async function handleOffer(request, env) {
+  const t = new URL(request.url).searchParams.get("t") || "";
+  const o = await readOffer(env, t);
+  if (!o) return json({ ok: false, reason: "invalid" }, 400);
+  if (o.x < Date.now() / 1000) return json({ ok: false, reason: "expired" }, 410);
+  return json({ ok: true, price: OFFER_PRICE / 100, email: o.e, expires: o.x, src: o.s || "" });
+}
+
+/* ------------------------------------------------------------------ */
+/* Personal offer tokens: base64url({e,x}).HMAC — signed, so they can't */
+/* be edited; tied to one email and an expiry time.                    */
+/* ------------------------------------------------------------------ */
+
+async function hmacKey(env) {
+  const secret = setting(env, "OFFER_SECRET") || `offer:${keySecret(env)}`;
+  return crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
+}
+const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const unb64u = (s) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((s.length + 3) % 4)), (c) => c.charCodeAt(0));
+
+async function makeOffer(env, email, exp, src) {
+  const body = b64u(new TextEncoder().encode(JSON.stringify({ e: email, x: exp, s: src || "" })));
+  const sig = await crypto.subtle.sign("HMAC", await hmacKey(env), new TextEncoder().encode(body));
+  return `${body}.${b64u(sig)}`;
+}
+
+async function readOffer(env, token) {
+  try {
+    const [body, sig] = String(token || "").split(".");
+    if (!body || !sig || token.length > 300 || !keySecret(env)) return null;
+    const ok = await crypto.subtle.verify("HMAC", await hmacKey(env), unb64u(sig), new TextEncoder().encode(body));
+    if (!ok) return null;
+    const o = JSON.parse(new TextDecoder().decode(unb64u(body)));
+    return o && typeof o.e === "string" && typeof o.x === "number" ? o : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Payment check                                                       */
 /* ------------------------------------------------------------------ */
@@ -135,9 +207,17 @@ async function verifyPayment(env, kit, paymentId) {
   payment = await res.json();
 
   const notes = payment.notes || {};
-  const coupon = String(notes.coupon || "").toUpperCase().replace(/\s+/g, "");
-  const priv = coupon ? PRIVATE_CODES[await sha256(coupon)] : undefined;
-  const expected = priv !== undefined ? priv : Math.max(100, product.amount - (COUPONS[coupon] || 0));
+  let expected;
+  if (notes.offer) {
+    // Personal offer: valid signature, not expired when paid, same email as the offer.
+    const o = await readOffer(env, notes.offer);
+    const buyer = String(notes.buyer_email || payment.email || "").trim().toLowerCase();
+    expected = o && payment.created_at <= o.x + 900 && o.e === buyer ? OFFER_PRICE : -1;
+  } else {
+    const coupon = String(notes.coupon || "").toUpperCase().replace(/\s+/g, "");
+    const priv = coupon ? PRIVATE_CODES[await sha256(coupon)] : undefined;
+    expected = priv !== undefined ? priv : Math.max(100, product.amount - (COUPONS[coupon] || 0));
+  }
   if (payment.amount !== expected || payment.currency !== "INR" || notes.product_id !== kit) {
     return fail(403, "Payment doesn't match this kit", `Email ${SUPPORT_EMAIL} with your payment ID (${paymentId}) and we'll sort it out.`);
   }
@@ -210,7 +290,7 @@ async function sendEmail(env, msg) {
 }
 
 // Your own Google Apps Script (tools/gmail-sender.gs) sends the email from your Gmail.
-async function sendViaGmailScript(env, { to, subject, html, text }) {
+async function sendViaGmailScript(env, { to, subject, html, text, lead }) {
   try {
     const r = await fetch(String(setting(env, "EMAIL_SCRIPT_URL")).trim(), {
       method: "POST",
@@ -223,6 +303,7 @@ async function sendViaGmailScript(env, { to, subject, html, text }) {
         text,
         name: "Pixelift Studio",
         replyTo: setting(env, "EMAIL_REPLY_TO") || "",
+        lead: lead || null, // the script logs this to your "Pixelift leads" Google Sheet
       }),
       redirect: "follow",
     });
@@ -292,6 +373,38 @@ Pixelift Studio
 You're receiving this email because you bought ${product.name} on pixeliftstudio.uk.`;
 }
 
+function offerEmailHtml({ name, product, link }) {
+  const first = name ? esc(name.split(" ")[0]) : "there";
+  return `<!doctype html><html><body style="margin:0;padding:24px 16px;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#222222;font-size:15px;line-height:1.6">
+<div style="max-width:560px;margin:0 auto">
+<p style="margin:0 0 16px">Hi ${first},</p>
+<p style="margin:0 0 16px">Thanks for your interest in <b>${esc(product.name)}</b>, the full source code from the Pixelift video: ${esc(product.blurb)}</p>
+<p style="margin:0 0 16px">Here's your personal link to get it for <b>${rupees(OFFER_PRICE)}</b> instead of ${rupees(PRODUCTS["kit-dashboard"].amount)}:</p>
+<p style="margin:0 0 8px"><a href="${esc(link)}" style="color:#5b3fd6;font-weight:bold">Get ${esc(product.name)} for ${rupees(OFFER_PRICE)}</a></p>
+<p style="margin:0 0 16px;font-size:13px;color:#555555">This link is just for you and works for ${OFFER_HOURS} hours. Use this same email address at checkout.</p>
+<p style="margin:0 0 16px">After payment you can download the files right away, and you'll get a copy of the download link by email.</p>
+<p style="margin:0 0 4px">If you have any questions, just reply to this email.</p>
+<p style="margin:0 0 24px">Thanks,<br>Pixelift Studio</p>
+<p style="margin:0;font-size:12px;color:#888888">You're receiving this email because you asked for the ${esc(product.name)} source code on pixeliftstudio.uk.</p>
+</div></body></html>`;
+}
+
+function offerEmailText({ name, product, link }) {
+  return `Hi ${name ? name.split(" ")[0] : "there"},
+
+Thanks for your interest in ${product.name}, the full source code from the Pixelift video.
+
+Here's your personal link to get it for ${rupees(OFFER_PRICE)} instead of ${rupees(PRODUCTS["kit-dashboard"].amount)}:
+${link}
+
+This link is just for you and works for ${OFFER_HOURS} hours. Use this same email address at checkout.
+
+If you have any questions, just reply to this email.
+
+Thanks,
+Pixelift Studio`;
+}
+
 /* ------------------------------------------------------------------ */
 /* Setup check                                                         */
 /* ------------------------------------------------------------------ */
@@ -347,6 +460,8 @@ async function sha256(text) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
+
+const rupees = (paise) => `₹${(paise / 100).toLocaleString("en-IN")}`;
 
 function maskEmail(e) {
   const [u, d] = String(e).split("@");
