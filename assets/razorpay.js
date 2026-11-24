@@ -16,7 +16,7 @@
     businessName: "Pixelift Studio",
     logo: "", // optional: absolute URL of a square logo
     themeColor: "#8b5cf6",
-    supportEmail: "hello@pixelift.studio",
+    supportEmail: "webcrew03@gmail.com",
   };
 
   // Amounts are in rupees here; converted to paise when opening checkout.
