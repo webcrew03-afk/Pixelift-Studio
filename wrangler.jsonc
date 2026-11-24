@@ -8,6 +8,6 @@
   "assets": {
     "directory": ".",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*", "/dashboard", "/dashboard/", "/buy", "/buy/", "/insta", "/insta/"]
+    "run_worker_first": ["/api/*", "/dashboard", "/dashboard/", "/buy", "/buy/", "/insta", "/insta/", "/yt", "/yt/", "/youtube", "/youtube/"]
   }
 }

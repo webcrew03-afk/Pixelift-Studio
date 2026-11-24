@@ -4,6 +4,8 @@ const SHORT_LINKS = {
   "/dashboard": "/?buy=dashboard",
   "/buy": "/?buy=dashboard",
   "/insta": "/?buy=dashboard&code=PIXELINSTA&src=instagram",
+  "/yt": "/?buy=dashboard&code=PIXELINSTA&src=youtube",
+  "/youtube": "/?buy=dashboard&code=PIXELINSTA&src=youtube",
 };
 
 export default {
