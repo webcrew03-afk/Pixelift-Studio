@@ -26,20 +26,19 @@
     "kit-dashboard": { name: "Motion Dashboard", price: 2500, secure: true, slug: "dashboard" },
   };
 
-  // Discount codes: rupees off the price. Keep in sync with COUPONS in worker/download.js.
-  // These are visible to anyone reading this file, so only use codes you share publicly.
-  var COUPONS = {
-    PIXELINSTA: { off: 1500, label: "Instagram offer" }, // ₹2,500 → ₹1,000
-  };
+  // Public discount codes (none — offers are private). Keep in sync with worker/download.js.
+  var COUPONS = {};
   // Private codes: only a SHA-256 hash is stored, so the code itself stays secret.
-  // `price` is the final price in rupees. Remove after testing.
+  // `price` is the final price in rupees. Keep in sync with worker/download.js.
   var PRIVATE_CODES = {
+    "1c0924e6ec8f1709e1d9271bd154f071c05fa2d9e14e06a82e27d45e1f6e96e5": { price: 1000, label: "Instagram offer" },
     "045d061d495c8c2113c6760b931550641e807a8d61763a98b8c53f097f1e639e": { price: 1, label: "Test purchase" },
   };
 
-  // Direct-checkout links, e.g. https://pixeliftstudio.uk/?buy=dashboard&code=PIXELINSTA&src=reel12
-  // buy  = product slug (opens the order screen right away)
-  // code = discount code to pre-apply (optional)
+  // Direct-checkout links, e.g. https://pixeliftstudio.uk/?buy=dashboard&src=reel12
+  // buy   = product slug (opens the order screen right away)
+  // code  = discount code to pre-apply (optional)
+  // offer = personal offer token from the "Get the code" email (optional)
   // src  = where the buyer came from; saved on the Razorpay payment (optional)
 
   var PLAN_CTAS = {};
@@ -55,7 +54,7 @@
   }
   // Resolves to { code, off, label } or null. `off` is rupees off `price`.
   function findCoupon(code, price) {
-    code = String(code || "").toUpperCase().replace(/\s+/g, ""); // "Pixel Insta" → "PIXELINSTA"
+    code = String(code || "").toUpperCase().replace(/\s+/g, ""); // ignore spaces and case
     if (!code) return Promise.resolve(null);
     if (COUPONS[code]) return Promise.resolve({ code: code, off: COUPONS[code].off, label: COUPONS[code].label });
     return sha256(code).then(function (h) {
@@ -91,13 +90,14 @@
     return null;
   }
 
-  function openCheckout(productId, coupon, buyer) {
+  function openCheckout(productId, coupon, buyer, offer) {
     buyer = buyer || {};
     var product = PRODUCTS[productId];
     if (!product) return;
-    var amount = Math.max(1, product.price - (coupon ? coupon.off : 0));
+    var amount = offer ? offer.price : Math.max(1, product.price - (coupon ? coupon.off : 0));
     var notes = { product_id: productId };
-    if (coupon) notes.coupon = coupon.code;
+    if (offer) { notes.offer = offer.token; if (offer.src && !SOURCE) notes.source = offer.src; }
+    else if (coupon) notes.coupon = coupon.code;
     if (SOURCE) notes.source = SOURCE;
     if (buyer.name) notes.buyer_name = buyer.name.slice(0, 80);
     if (buyer.email) notes.buyer_email = buyer.email.slice(0, 120);
@@ -116,7 +116,7 @@
         amount: amount * 100, // paise
         currency: "INR",
         name: RAZORPAY_CONFIG.businessName,
-        description: product.name + (coupon ? " (" + coupon.code + ")" : ""),
+        description: product.name + (offer ? " (personal offer)" : coupon ? " (" + coupon.code + ")" : ""),
         image: RAZORPAY_CONFIG.logo || undefined,
         notes: notes,
         prefill: { name: buyer.name || "", email: buyer.email || "" },
@@ -140,7 +140,7 @@
   }
 
   // ---------- Order screen: price + discount code, then Razorpay ----------
-  function showOrder(productId, presetCode) {
+  function showOrder(productId, presetCode, offer, notice) {
     var product = PRODUCTS[productId];
     if (!product) return;
     injectStyles();
@@ -150,7 +150,7 @@
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
     var box = el("div", "rzp-px-box");
-    var kicker = el("div", "rzp-px-kicker", "Your order");
+    var kicker = el("div", "rzp-px-kicker", offer ? "Your personal offer" : "Your order");
     var title = el("h3", "", product.name);
     var line = el("div", "rzp-px-line");
     var lbl = el("span", "", "15 animations · full source + README");
@@ -165,6 +165,7 @@
     var emailIn = el("input"); emailIn.type = "email"; emailIn.placeholder = "Email — your download link is sent here"; emailIn.autocomplete = "email";
     emailIn.setAttribute("aria-label", "Email"); emailIn.value = saved.email || "";
     fields.appendChild(nameIn); fields.appendChild(emailIn);
+    if (offer) { emailIn.value = offer.email; emailIn.readOnly = true; emailIn.title = "Your offer is linked to this email"; }
     var fieldMsg = el("p", "rzp-px-msg err");
     [nameIn, emailIn].forEach(function (i) { i.addEventListener("input", function () { fieldMsg.textContent = ""; }); });
 
@@ -177,6 +178,14 @@
     apply.type = "submit";
     form.appendChild(input); form.appendChild(apply);
     var msg = el("p", "rzp-px-msg");
+    if (offer) {
+      form.style.display = "none";
+      var left = Math.max(1, Math.round((offer.expires * 1000 - Date.now()) / 3600000));
+      msg.textContent = "✓ Personal offer for " + offer.email + " · expires in " + left + (left === 1 ? " hour" : " hours");
+      msg.className = "rzp-px-msg ok";
+    } else if (notice) {
+      msg.textContent = notice; msg.className = "rzp-px-msg err";
+    }
 
     var row = el("div", "rzp-px-row");
     var pay = el("button", "rzp-px-btn rzp-px-pay");
@@ -191,9 +200,9 @@
     document.body.appendChild(overlay);
 
     function render() {
-      var total = Math.max(1, product.price - (coupon ? coupon.off : 0));
+      var total = offer ? offer.price : Math.max(1, product.price - (coupon ? coupon.off : 0));
       price.innerHTML = "";
-      if (coupon) { var old = el("s", "", inr(product.price)); price.appendChild(old); price.appendChild(document.createTextNode(" ")); }
+      if (coupon || offer) { var old = el("s", "", inr(product.price)); price.appendChild(old); price.appendChild(document.createTextNode(" ")); }
       price.appendChild(document.createTextNode(inr(total)));
       pay.textContent = "Pay " + inr(total) + " →";
     }
@@ -219,7 +228,8 @@
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(buyer.email)) { fieldMsg.textContent = "Please enter a valid email — your download link is sent there."; emailIn.focus(); return; }
       fieldMsg.textContent = "";
       try { localStorage.setItem("px_buyer", JSON.stringify(buyer)); } catch (e) {}
-      dismiss(); openCheckout(productId, coupon, buyer);
+      if (offer) buyer.email = offer.email;
+      dismiss(); openCheckout(productId, coupon, buyer, offer);
     });
     cancel.addEventListener("click", dismiss);
     overlay.addEventListener("click", function (e) { if (e.target === overlay) dismiss(); });
@@ -365,7 +375,21 @@
   if (buy) {
     var pid = Object.keys(PRODUCTS).filter(function (k) { return PRODUCTS[k].slug === buy || k === buy || k === "kit-" + buy; })[0];
     if (pid) {
-      var start = function () { setTimeout(function () { showOrder(pid, params.get("code")); }, 1800); };
+      var token = params.get("offer");
+      var offerReq = token
+        ? fetch("/api/offer?t=" + encodeURIComponent(token)).then(function (r) { return r.json(); }).catch(function () { return { ok: false, reason: "error" }; })
+        : Promise.resolve(null);
+      var start = function () {
+        setTimeout(function () {
+          offerReq.then(function (d) {
+            if (!token) return showOrder(pid, params.get("code"));
+            if (d && d.ok) return showOrder(pid, null, { token: token, price: d.price, email: d.email, expires: d.expires, src: d.src });
+            showOrder(pid, params.get("code"), null, d && d.reason === "expired"
+              ? "This offer link has expired. Request a new one at pixeliftstudio.uk/get"
+              : "This offer link isn't valid. Request a new one at pixeliftstudio.uk/get");
+          });
+        }, 1800);
+      };
       if (document.readyState === "complete") start(); else window.addEventListener("load", start);
     }
   }
